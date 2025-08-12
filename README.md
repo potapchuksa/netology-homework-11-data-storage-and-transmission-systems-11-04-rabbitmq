@@ -237,7 +237,7 @@ docker compose up -d
 
 ### Решение
 
-Создал playbook [./rabbitmq-claster.yml](task-4/rabbitmq-claster.yml). Ему понадобятся шаблоны формата jinja2: [./templates/rabbitmq-env.conf.j2](task-4/templates/rabbitmq-env.conf.j2) для файла переменных среды окружения и [./templates/rabbitmq.conf.j2](task-4/templates/rabbitmq.conf.j2) для конфигурационного файла. Конфигурационный файл Ansible [./ansible.cfg](task-4/ansible.cfg). И [./inventory.ini](task-4/inventory.ini). Переменная inventory_hostname будет использоваться в качестве имени хоста RabbitMQ.
+Создал playbook [./rabbitmq-cluster.yml](task-4/rabbitmq-cluster.yml). Ему понадобятся шаблоны формата jinja2: [./templates/rabbitmq-env.conf.j2](task-4/templates/rabbitmq-env.conf.j2) для файла переменных среды окружения и [./templates/rabbitmq.conf.j2](task-4/templates/rabbitmq.conf.j2) для конфигурационного файла. Конфигурационный файл Ansible [./ansible.cfg](task-4/ansible.cfg). И [./inventory.ini](task-4/inventory.ini). Переменная inventory_hostname будет использоваться в качестве имени хоста RabbitMQ.
 
 Запускаем плейбук, проверяем успешность выполнения плейбука, поднятия кластера, и применения политик ha-all.
 
