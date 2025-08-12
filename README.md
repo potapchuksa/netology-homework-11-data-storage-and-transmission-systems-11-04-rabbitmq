@@ -59,7 +59,7 @@ $ pip install pika
 
 ### Решение
 
-1. [Produser](task-1/produser.py)
+1. [Producer](task-1/producer.py)
 
 2. [Consumer](task-1/consumer.py)
 
@@ -237,7 +237,7 @@ docker compose up -d
 
 ### Решение
 
-Создал playbook [./rabbit-claster.yml](task-4/rabbit-claster.yml). Ему понадобятся шаблоны формата jinja2: [./templates/rabbitmq-env.conf.j2](task-4/templates/rabbitmq-env.conf.j2) для файла переменных среды окружения и [./templates/rabbitmq.conf.j2](task-4/templates/rabbitmq.conf.j2) для конфигурационного файла. Конфигурационный файл Ansible [./ansible.cfg](task-4/ansible.cfg). И [./inventory.ini](task-4/inventory.ini). Переменная inventory_hostname будет использоваться в качестве имени хоста RabbitMQ.
+Создал playbook [./rabbitmq-claster.yml](task-4/rabbitmq-claster.yml). Ему понадобятся шаблоны формата jinja2: [./templates/rabbitmq-env.conf.j2](task-4/templates/rabbitmq-env.conf.j2) для файла переменных среды окружения и [./templates/rabbitmq.conf.j2](task-4/templates/rabbitmq.conf.j2) для конфигурационного файла. Конфигурационный файл Ansible [./ansible.cfg](task-4/ansible.cfg). И [./inventory.ini](task-4/inventory.ini). Переменная inventory_hostname будет использоваться в качестве имени хоста RabbitMQ.
 
 Запускаем плейбук, проверяем успешность выполнения плейбука, поднятия кластера, и применения политик ha-all.
 
@@ -251,7 +251,7 @@ docker compose up -d
 
 ![](img/img-04-04.png)
 
-Отправим сообщение с помощью нашего [producer.py](task-4/producer.py) из gthdjuj задания (вполне подойдет)
+Отправим сообщение с помощью нашего [producer.py](task-4/producer.py) из первого задания (вполне подойдет)
 
 ![](img/img-04-05.png)
 
