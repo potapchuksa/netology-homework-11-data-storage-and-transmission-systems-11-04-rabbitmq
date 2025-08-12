@@ -26,6 +26,16 @@
 
 ### Решение
 
+Установил Docker, после установки
+```Bash
+docker run -d -h my-rabbit -p 15672:15672 rabbitmq:4-management
+docker ps
+```
+
+![](img/img-01-01.png)
+
+![](img/img-01-02.png)
+
 ---
 
 ### Задание 2. Отправка и получение сообщений
@@ -48,6 +58,27 @@ $ pip install pika
 Для закрепления материала можете попробовать модифицировать скрипты, чтобы поменять название очереди и отправляемое сообщение.
 
 ### Решение
+
+1. [Produser](task-1/produser.py)
+
+2. [Consumer](task-1/consumer.py)
+
+```Bash
+docker run -d -h my-rabbit -p 15672:15672 -p 5672:5672 rabbitmq:4-management
+docker ps
+```
+
+![](img/img-02-01.png)
+
+![](img/img-02-02.png)
+
+![](img/img-02-03.png)
+
+![](img/img-02-04.png)
+
+![](img/img-02-05.png)
+
+![](img/img-02-06.png)
 
 ---
 
@@ -86,6 +117,110 @@ $ rabbitmqadmin get queue='hello'
 
 ### Решение
 
+Создал в докере новую сеть и запустил два контейнера RabbitMQ с одинаковым RABBITMQ_ERLANG_COOKIE, с разными именами хостов и порты нам понaдобятся только на одном, и собрал кластер.
+
+```Bash
+docker network create rabbitnet
+docker run -d --name rabbit1 -h rabbit1 --network rabbitnet -e RABBITMQ_ERLANG_COOKIE='cookie' -p 15672:15672 -p 5672:5672 rabbitmq:4-management
+docker run -d --name rabbit2 -h rabbit2 --network rabbitnet -e RABBITMQ_ERLANG_COOKIE='cookie' rabbitmq:4-management
+docker exec rabbit2 rabbitmqctl stop_app
+docker exec rabbit2 rabbitmqctl join_cluster rabbit@rabbit1
+docker exec rabbit2 rabbitmqctl start_app
+```
+
+![](img/img-03-01.png)
+
+![](img/img-03-02.png)
+
+Важные изменения: в RabbitMQ 4.x полностью удалены классические mirrored queues А вместе с ними — и параметры: ha-mode и ha-sync-mode
+
+Вместо них Нужно использовать Quorum Queues — это современная, отказоустойчивая замена для высокодоступных очередей.
+
+Старый способ (RabbitMQ 3.x):
+```Bash
+rabbitmqctl set_policy ha-all "" '{"ha-mode":"all","ha-sync-mode":"automatic"}'
+```
+
+Новый способ (RabbitMQ 4.x):
+
+Существует два типа очередей:
+
+* **Quorum Queues** - современный тип очереди, который реализует устойчивую, реплицированную очередь на основе алгоритма консенсуса Raft и должен рассматриваться как выбор по умолчанию, когда требуется **реплицированная очередь с высокой доступностью**.
+
+* **Classic Queues** - исходный тип очереди, подходящий для случаев, когда безопасность данных не является приоритетом, поскольку данные, хранящиеся в классических очередях, **не реплицируются**. Классические очереди используют **нереплицированную** реализацию очереди FIFO.
+
+Классические очереди являются типом очереди по умолчанию, если тип очереди по умолчанию не переопределен для виртуального узла.
+
+Можно установить для виртуального хоста другой тип очереди по умолчанию, например, "quorum", "stream" или "classic". Этот параметр называется default_queue_type и задаётся при создании или обновлении виртуального хоста.
+
+Важные уточнения:
+
+* Эта настройка влияет только на новые очереди, создаваемые без явного указания типа очереди.
+
+* Тип очереди нельзя изменить для уже созданных очередей, так как тип очереди является неизменяемым параметром.
+
+* Если клиент при объявлении очереди укажет x-queue-type, то этот тип будет использован в приоритете.
+
+* В RabbitMQ версии 3.13.4 и выше (включая 4.x) появилась возможность задавать и node-wide default queue type в конфигурационном файле rabbitmq.conf (директива default_queue_type), но приоритет всегда имеет настройка виртуального хоста.
+
+* В официальном RabbitMQ Docker образе нет переменной окружения, которая напрямую задаёт параметр default_queue_type, например "quorum", для виртуального хоста.     
+Практическое исследование показало, что параметр deault_queue_type не сработал в моем случае (см. в конце задания).
+
+Запустил [producer](task-3/producer.py) из прошлого задания и получил классическую очередь
+
+![](img/img-03-03.png)
+
+Модифицировал (добавил параметры durable=True, arguments={'x-queue-type': 'quorum'}, без durable=True работать не будет, и изменил название очереди) и запустил [producer-tq](task-3/producer-tq.py) и получил quorum очередь.
+```
+channel.queue_declare(queue='hello', durable=True, arguments={'x-queue-type': 'quorum'})
+```
+
+![](img/img-03-04.png)
+
+Добавил виртуальный хост с параметром --default-queue-type quorum
+```
+docker exec rabbit1 rabbitmqctl add_vhost myvhost --default-queue-type quorum
+```
+
+![](img/img-03-05.png)
+
+Даже проверю установился ли параметр.
+```
+curl -u guest:guest http://localhost:15672/api/vhosts/myvhost
+```
+
+![](img/img-03-06.png)
+
+Снова модифицировал (добавил параметр virtual_host='myvhost'), и снова изменил название очереди) и запустил [producer-myvhost](task-3/producer-myvhost.py) и получил классическую очередь, хотя рассчитывал на quorum.
+
+![](img/img-03-07.png)
+
+И, конечно, если указать quorum явно, то и результат будет соответствующий ([producer-myvhost-tq.py](task-3/producer-myvhost-tq.py)).
+
+![](img/img-03-08.png)
+
+И попробую собрать кластер с помощью Docker-compose (как на лекции), RabbitMQ 3 и установить политику ha-all.
+
+Конфигурация кластера:
+
+* [./docker-compose.yml](task-3/docker-compose.yml)
+* [./.env](task-3/.env)
+* [./config/rabbitmq.conf](task-3/config/rabbitmq.conf)
+* [./defs/def.json](task-3/defs/def.json)
+* [./defs/enabled_plugins](task-3/defs/enabled_plugins)
+
+```Bash
+docker compose up -d
+```
+
+![](img/img-03-09.png)
+
+![](img/img-03-10.png)
+
+Для того, чтобы кластер был доступен при падении одной из нод можно пробросить разные ноды на разные порты.
+
+Все [файлы задания](task-3) можно посмотреть здесь.
+
 ---
 
 ## Дополнительные задания (со звёздочкой*)
@@ -101,4 +236,67 @@ $ rabbitmqadmin get queue='hello'
 *Готовый плейбук разместите в своём репозитории.*
 
 ### Решение
+
+Создал playbook [./rabbit-claster.yml](task-4/rabbit-claster.yml). Ему понадобятся шаблоны формата jinja2: [./templates/rabbitmq-env.conf.j2](task-4/templates/rabbitmq-env.conf.j2) для файла переменных среды окружения и [./templates/rabbitmq.conf.j2](task-4/templates/rabbitmq.conf.j2) для конфигурационного файла. Конфигурационный файл Ansible [./ansible.cfg](task-4/ansible.cfg). И [./inventory.ini](task-4/inventory.ini). Переменная inventory_hostname будет использоваться в качестве имени хоста RabbitMQ.
+
+Запускаем плейбук, проверяем успешность выполнения плейбука, поднятия кластера, и применения политик ha-all.
+
+![](img/img-04-01.png)
+
+![](img/img-04-02.png)
+
+![](img/img-04-03.png)
+
+Чтобы не возиться с новыми пользователями и паролями пробросим SSH туннель к первой ноде (с пользователем и паролем guest можно работать только локально)
+
+![](img/img-04-04.png)
+
+Отправим сообщение с помощью нашего [producer.py](task-4/producer.py) из gthdjuj задания (вполне подойдет)
+
+![](img/img-04-05.png)
+
+Проверим, что получили в очереди.
+
+![](img/img-04-06.png)
+
+Теперь перебросим туннель на вторую ноду и отправим сообщение так же.
+
+![](img/img-04-07.png)
+
+Сообщение попало в очередь
+
+![](img/img-04-08.png)
+
+Посмотрим состояние кластера
+
+![](img/img-04-09.png)
+
+Уроним превую ноду командой
+```Bash
+sudo systemctl stop rabbitmq-server
+```
+
+проверим состояние кластера на второй ноде
+
+![](img/img-04-10.png)
+
+и в web-интерфейсе RabbitMQ.
+
+![](img/img-04-11.png)
+
+Мы убедились, что первая нода, на которой мы устанавливали политику ha-all не работает и попробуем отправить сообщение на третью ноду, для чего пробросим на нее туннель и отправим сообщение с помощью нашего producer.py.
+
+![](img/img-04-12.png)
+
+Как видим сообщение попало в кластер.
+
+![](img/img-04-13.png)
+
+Восстановим работоспособность первой ноды.
+
+![](img/img-04-14.png)
+
+Кластер восстановился.
+
+![](img/img-04-15.png)
 

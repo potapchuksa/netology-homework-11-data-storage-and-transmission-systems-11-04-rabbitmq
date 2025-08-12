@@ -1,0 +1,14 @@
+# Используем классическую конфигурацию для обнаружения
+cluster_formation.peer_discovery_backend = classic_config
+
+# Список всех нод кластера
+{% for host in groups['rabbitmq'] %}
+cluster_formation.classic_config.nodes.{{ loop.index }} = rabbit@{{ host }}
+{% endfor %}
+
+# Надёжная загрузка Mnesia
+mnesia_table_loading_retry_timeout = 10000
+mnesia_table_loading_retry_limit = 2
+
+# Включаем веб-интерфейс
+management.tcp.port = 15672

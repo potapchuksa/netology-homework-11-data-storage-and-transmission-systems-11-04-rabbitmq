@@ -1,0 +1,98 @@
+---
+# rabbitmq-cluster.yml
+# Установка и настройка кластера RabbitMQ с автоматической кластеризацией
+
+- name: Этап 1 — Установка RabbitMQ из стандартного репозитория Debian 12 (bookworm)
+  hosts: rabbitmq
+  become: yes
+  gather_facts: yes
+
+  vars:
+    erlang_cookie: "mysecreterlangcookie123"
+
+  tasks:
+    - name: Установка rabbitmq-server из репозитория bookworm
+      apt:
+        name: rabbitmq-server
+        state: present
+        update_cache: yes
+
+    - name: Остановка RabbitMQ, если запущен
+      service:
+        name: rabbitmq-server
+        state: stopped
+      ignore_errors: yes
+
+    - name: Установка Erlang cookie
+      copy:
+        content: "{{ erlang_cookie }}"
+        dest: /var/lib/rabbitmq/.erlang.cookie
+        owner: rabbitmq
+        group: rabbitmq
+        mode: '0600'
+
+    - name: Настройка имени ноды (rabbitmq-env.conf)
+      template:
+        src: templates/rabbitmq-env.conf.j2
+        dest: /etc/rabbitmq/rabbitmq-env.conf
+        owner: root
+        mode: '0644'
+
+    - name: Настройка rabbitmq.conf
+      template:
+        src: templates/rabbitmq.conf.j2
+        dest: /etc/rabbitmq/rabbitmq.conf
+        owner: root
+        mode: '0644'
+
+    - name: Включение плагинов
+      copy:
+        content: "[rabbitmq_management]."
+        dest: /etc/rabbitmq/enabled_plugins
+        owner: root
+        mode: '0644'
+
+    - name: Обновление /etc/hosts для резолва имён
+      lineinfile:
+        path: /etc/hosts
+        line: "{{ hostvars[item].ansible_host }} {{ item }}"
+        state: present
+      loop: "{{ groups['rabbitmq'] }}"
+      # when: item != inventory_hostname
+
+
+- name: Этап 2 — Поочерёдный перезапуск (rolling restart)
+  hosts: rabbitmq
+  serial: 1
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Перезапуск RabbitMQ
+      service:
+        name: rabbitmq-server
+        state: restarted
+        enabled: yes
+
+    - name: Ожидание, пока нода станет доступной
+      command: rabbitmqctl status
+      register: status_check
+      until: status_check is success
+      retries: 12
+      delay: 5
+      ignore_errors: yes
+
+
+- name: Этап 3 — Создание политики ha-all (только на первой ноде)
+  hosts: rabbitmq
+  become: yes
+  gather_facts: no
+
+  tasks:
+    - name: Установка политики ha-all для зеркалирования всех очередей
+      command: >
+        rabbitmqctl set_policy ha-all ".*"
+        '{"ha-mode":"all","ha-sync-mode":"automatic"}'
+        --priority 1 --apply-to all
+      when: inventory_hostname == groups['rabbitmq'] | first
+

@@ -1,0 +1,50 @@
+---
+- name: Полный сброс состояния RabbitMQ на всех нодах
+  hosts: rabbitmq
+  become: yes
+  gather_facts: yes
+
+  tasks:
+    - name: Остановка RabbitMQ
+      service:
+        name: rabbitmq-server
+        state: stopped
+      ignore_errors: yes
+
+    - name: Удаление данных Mnesia (кластер, очереди, пользователи)
+      file:
+        path: /var/lib/rabbitmq/mnesia
+        state: absent
+
+    - name: Удаление erlang.cookie
+      file:
+        path: /var/lib/rabbitmq/.erlang.cookie
+        state: absent
+
+    - name: Удаление конфигурационных файлов
+      file:
+        path: "{{ item }}"
+        state: absent
+      loop:
+        - /etc/rabbitmq/rabbitmq-env.conf
+        - /etc/rabbitmq/rabbitmq.conf
+        - /etc/rabbitmq/enabled_plugins
+
+    - name: Удаление записей node1, node2, node3 из /etc/hosts
+      lineinfile:
+        path: /etc/hosts
+        regexp: '.*{{ item }}$'
+        state: absent
+      loop: ['node1', 'node2', 'node3']
+
+    - name: Создание пустой директории mnesia
+      file:
+        path: /var/lib/rabbitmq/mnesia
+        state: directory
+        owner: rabbitmq
+        group: rabbitmq
+        mode: '0755'
+
+    - name: Сброс завершён
+      debug:
+        msg: "Нода {{ inventory_hostname }} сброшена. Готова к повторной установке."
